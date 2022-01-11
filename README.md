@@ -1,7 +1,9 @@
-# Pyglin-chess-engine
+# Pyglin chess engine
 Chess engine written in python
 
 ### Chess logic implemented using python-chess library: https://github.com/niklasf/python-chess
+
+#### Lichess: https://lichess.org/@/Pyglin
 
 ## Algorythms:
 ### Pvs alpha-beta
