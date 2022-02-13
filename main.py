@@ -1,8 +1,6 @@
-import chess
-import time
-import requests
+import time, logic, chess, requests, random, traceback, chess.polyglot
 
-PIECES_VAL = {'p': 100, 'n': 320, 'b': 330, 'r': 500, 'q': 900, 'k': 0}
+PIECES_VAL = {'p': 105, 'n': 322, 'b': 333, 'r': 502, 'q': 925, 'k': 10000}
 PIECES_SQUARES_W = {
     'p': [
         0,  0,  0,  0,  0,  0,  0,  0,
@@ -35,9 +33,9 @@ PIECES_SQUARES_W = {
         -20, -10, -10, -10, -10, -10, -10, -20
     ],
     'r': [
-        -5, -5, 0, 5, 5, -1, -5, -5,
+        -5, -4, -1, 5, 5, -1, -4, -5,
         -5, 0, 0, 0, 0, 0, 0, -5,
-        -5, 0, 0, 0, 0, 0, 0, -5,
+        -5, 0, -2, 0, 0, 0, 0, -5,
         -5, 0, 0, 0, 0, 0, 0, -5,
         -5, 0, 0, 0, 0, 0, 0, -5,
         -5, 0, 0, 0, 0, 0, 0, -5,
@@ -54,7 +52,7 @@ PIECES_SQUARES_W = {
         -10, 0, 5, 0, 0, 0, 0, -10,
         -20, -10, -10, -5, -5, -10, -10, -20
     ],
-	'k': [
+    'k': [
         15, 40, 5, 0, 0, 30, 35, 15,
         8, 10, -10, -10, -10, -10, 10, 8,
         -15, -25, -30, -30, -30, -30, -25, -15,
@@ -72,7 +70,7 @@ PIECES_SQUARES_B = {
     'b': list(reversed(PIECES_SQUARES_W['b'])),
     'r': list(reversed(PIECES_SQUARES_W['r'])),
     'q': list(reversed(PIECES_SQUARES_W['q'])),
-	'k': list(reversed(PIECES_SQUARES_W['k']))
+    'k': list(reversed(PIECES_SQUARES_W['k']))
 }
 
 PIECES_SQUARES_W_ENDGAME = {
@@ -147,219 +145,172 @@ PIECES_SQUARES_B_ENDGAME = {
     'k': list(reversed(PIECES_SQUARES_W_ENDGAME['k']))
 }
 
-max_tt = 1e5
-
-tt = {}
-
 def evaluate(board):
     eval = 0
     isEndgame = is_endgame(board)
-    outcome = board.outcome()
-    if outcome != None:
-        if outcome.termination == chess.Termination.CHECKMATE:
-            return 10000 if outcome.winner else -10000
-    if board.is_stalemate() or board.is_repetition():
-        return 0
-    pawnsW = {0:0, 1:0, 2:0, 3:0, 4:0, 5:0, 6:0, 7:0}
-    pawnsB = {0:0, 1:0, 2:0, 3:0, 4:0, 5:0, 6:0, 7:0}
-    whiteKingSq = board.king(chess.WHITE)
-    blackKingSq = board.king(chess.BLACK)
-    if isEndgame:
-        for piecetype, value in PIECES_VAL.items():
-            for wPieceSq in board.pieces(chess.PIECE_SYMBOLS.index(piecetype), 1):
-                eval += value + PIECES_SQUARES_W_ENDGAME[piecetype][wPieceSq]
-                if piecetype == 'p':
-                    file = chess.square_file(wPieceSq)
-                    pawnsW[file] += 1
-                    if pawnsW[file] > 1:
-                        eval -= 22
-                    if chess.square_distance(wPieceSq, whiteKingSq) <= 2:
-                        eval += 7
-            for bPieceSq in board.pieces(chess.PIECE_SYMBOLS.index(piecetype), 0):
-                eval -= value + PIECES_SQUARES_B_ENDGAME[piecetype][bPieceSq]
-                if piecetype == 'p':
-                    file = chess.square_file(bPieceSq)
-                    pawnsB[file] += 1
-                    if pawnsB[file] > 1:
-                        eval += 22
-                    if chess.square_distance(bPieceSq, blackKingSq) <= 2:
-                        eval -= 7
+
+    for rowN, row in enumerate(board.pos):
+        for colN, squareSymbol in enumerate(row):
+            if squareSymbol == '+': continue
+            if squareSymbol.isupper():
+                eval += PIECES_VAL[squareSymbol.lower()]
+                if isEndgame: eval += PIECES_SQUARES_W_ENDGAME[squareSymbol.lower()][rowN*8+colN]
+                else: eval += PIECES_SQUARES_W[squareSymbol.lower()][rowN*8+colN]
+            else:
+                eval -= PIECES_VAL[squareSymbol]
+                if isEndgame: eval -= PIECES_SQUARES_B_ENDGAME[squareSymbol][rowN*8+colN]
+                else: eval -= PIECES_SQUARES_B[squareSymbol][rowN*8+colN]
+
+    return eval * 1 if board.turn == 1 else eval * -1
+
+def is_endgame(board):
+    materialW = 0
+    materialB = 0
+    for row in board.pos:
+        for squareSymbol in row:
+            if squareSymbol == '+': continue
+            if squareSymbol.isupper():
+                materialW += PIECES_VAL[squareSymbol.lower()]
+            else:
+                materialB += PIECES_VAL[squareSymbol]
+
+    if materialW < 700:
+        return True
+    if materialB < 700:
+        return True
+    if materialW + materialB <= 4000:
+        return True
     else:
-        for piecetype, value in PIECES_VAL.items():
-            for wPieceSq in board.pieces(chess.PIECE_SYMBOLS.index(piecetype), 1):
-                eval += value + PIECES_SQUARES_W[piecetype][wPieceSq]
-                if piecetype == 'p':
-                    file = chess.square_file(wPieceSq)
-                    pawnsW[file] += 1
-                    if pawnsW[file] > 1:
-                        eval -= 22
-                    if chess.square_distance(wPieceSq, whiteKingSq) <= 2:
-                        eval += 7
-            for bPieceSq in board.pieces(chess.PIECE_SYMBOLS.index(piecetype), 0):
-                eval -= value + PIECES_SQUARES_B[piecetype][bPieceSq]
-                if piecetype == 'p':
-                    file = chess.square_file(bPieceSq)
-                    pawnsB[file] += 1
-                    if pawnsB[file] > 1:
-                        eval += 22
-                    if chess.square_distance(bPieceSq, blackKingSq) <= 2:
-                        eval -= 7
+        return False
 
-    return eval * 1 if board.turn else eval * -1
 
-def quiesce(board, alpha, beta, searchN):
+def amount_of_pieces(pos):
+    p = 0
+    for row in pos:
+        for sq in row:
+            if sq != '+': p += 1
+    return p
+
+
+def sort_moves(board):
+    remainingMoves = list(board.get_pseudo_legal_moves())
+    for move in remainingMoves:
+        if board.pos[move.toSquare[0]][move.toSquare[1]] != '+':
+            if PIECES_VAL[board.pos[move.fromSquare[0]][move.fromSquare[1]].lower()] - PIECES_VAL[board.pos[move.toSquare[0]][move.toSquare[1]].lower()] < -100:
+                remainingMoves.remove(move)
+                yield move
+        elif move.promotion:
+            remainingMoves.remove(move)
+            yield move
+    for move in remainingMoves:
+        yield move
+
+def quiesce(board, alpha, beta):
+    if not board.get_king(0) or not board.get_king(1):
+        return evaluate(board)
+    if board.is_threefold():
+        return 0
     eval = evaluate(board)
     if eval >= beta:
         return beta
     if alpha < eval:
         alpha = eval
     for move in sort_moves(board):
-        if (board.is_capture(move) and not board.is_en_passant(move)):
-            if PIECES_VAL[board.piece_at(move.to_square).symbol().lower()] >= PIECES_VAL[board.piece_at(move.from_square).symbol().lower()] or not board.is_attacked_by(not board.turn, move.to_square):
-                board.push(move)
-                searchN += 1
-                score = -quiesce(board, -beta, -alpha, searchN)
-                board.pop()
-                if score >= beta:
-                    return beta
-                if score > alpha:
-                    alpha = score
-            elif board.gives_check(move):
-                board.push(move)
-                searchN += 1
-                score = -quiesce(board, -beta, -alpha, searchN)
-                board.pop()
-                if score >= beta:
-                    return beta
-                if score > alpha:
-                    alpha = score
-        elif board.gives_check(move):
-            board.push(move)
-            searchN += 1
-            score = -quiesce(board, -beta, -alpha, searchN)
-            board.pop()
-            if score >= beta:
-                return beta
-            if score > alpha:
-                alpha = score
+        if board.pos[move.toSquare[0]][move.toSquare[1]] == '+': continue
+        if not (PIECES_VAL[board.pos[move.fromSquare[0]][move.fromSquare[1]].lower()] - PIECES_VAL[board.pos[move.toSquare[0]][move.toSquare[1]].lower()] < 200) and board.pos[move.fromSquare[0]][move.fromSquare[1]].lower() != 'k':
+            continue
+        board.move(move)
+        score = -quiesce(board, -beta, -alpha)
+        board.remove_last()
+        if score >= beta:
+            return beta
+        if score > alpha:
+            alpha = score
     return alpha
 
-def sort_moves(board):
-    remaining = list(board.legal_moves)
-
-    t = tt.get(board.fen())
-    if t:
-        best = t[2]
-        if best:
-            remaining.remove(best)
-            yield best
-
-    for move in remaining:
-        if (board.is_capture(move) and not board.is_en_passant(move)):
-            if (PIECES_VAL[board.piece_at(move.to_square).symbol().lower()] - PIECES_VAL[board.piece_at(move.from_square).symbol().lower()]) > 50:
-                remaining.remove(move)
-                yield move
-                
-    for move in remaining:
-        if board.gives_check(move) or move.promotion != None:
-            remaining.remove(move)
-            yield move
-
-    for move in remaining:
-        if board.is_attacked_by(not board.turn, move.from_square) and not board.is_attacked_by(board.turn, move.from_square):
-            remaining.remove(move)
-            yield move
-
-    for move in remaining:
-        yield move
-
-times = []
-color = {'self':None}
-
-def search(board, depth):
-    result = pvs(board, -10000, 10000, depth)
-    eval = result[0]
-    move = result[1]
-    return move, eval
-
-def find_move(board, depth):
-    start = time.time()
-    color['self'] = not board.turn
-    if board.ply() < 30:
-        response = requests.get(f"https://explorer.lichess.ovh/masters?fen={board.fen()}")
-        json = response.json()
-        if len(json['moves']) > 0:
-            moveUci = (json['moves'][0])['uci']
-            move = chess.Move.from_uci(moveUci)
-            return move
-    move, eval = search(board, depth)
-
-
-    times.append(time.time() - start)
-    print(sum(times) / len(times))
-    if len(tt) > max_tt:
-        tt.clear()
-        print('clearing tt')
-    if move == None:
-        print('None')
-        return list(board.legal_moves)[0]
-    print(eval)
-    return move
-
-def is_endgame(board):
-    material = 0
-    for piecetype, value in PIECES_VAL.items():
-        for wPieceSq in board.pieces(chess.PIECE_SYMBOLS.index(piecetype), 1):
-            material += value
-            if piecetype == 'q':
-                material += 100
-        for bPieceSq in board.pieces(chess.PIECE_SYMBOLS.index(piecetype), 0):
-            material += value
-            if piecetype == 'q':
-                material += 100
-    if material <= 4000:
-        return True
-    else:
-        return False
-
-
 def pvs(board, alpha, beta, depthLeft):
-    if board.is_game_over():
-        return evaluate(board), None
+    #king captured
+    if not board.get_king(0) or not board.get_king(1):
+        return -evaluate(board), None, 
+    #repetition
+    if board.is_threefold():
+        return 0, None, None
+    moves = list(sort_moves(board))
+    #stalemate
+    if len(moves) == 0:
+        return 0, None, None
+    best2 = None
     if depthLeft == 0:
-        return -quiesce(board, alpha, beta, 0), None
-    t = tt.get(board.fen())
-    if t:
-        if t[1] >= depthLeft:
-            return -t[0], t[2]
+        #return evaluate(board), None, None
+        return -quiesce(board, alpha, beta), None, None  
+        
     best = None
-    for index, move in enumerate(sort_moves(board)):
-        board.push(move)
+    for index, move in enumerate(moves):
+        board.move(move)
         if index == 0:
-            score, _ = pvs(board, -beta, -alpha, depthLeft-1)
+            score, best2, _ = pvs(board, -beta, -alpha, depthLeft-1)
         else:
             score = -zws(board, -alpha, depthLeft-1)
             if alpha < score < beta:
-                score, _ = pvs(board, -beta, -score, depthLeft-1)
-        board.pop()
+                score, best2, _ = pvs(board, -beta, -score, depthLeft-1)
+        board.remove_last()
         if score > alpha:
             alpha = score
             best = move
         if alpha >= beta:
             best = move
             break
-    tt[board.fen()] = [alpha, depthLeft, best]
-    return -alpha, best
+    return -alpha, best, best2
 
 def zws(board, beta, depthLeft):
-    if board.is_game_over():
+    if not board.get_king(0) or not board.get_king(1):
         return evaluate(board)
+    if board.is_threefold():
+        return 0
+    moves = list(sort_moves(board))
+    #stalemate
+    if len(moves) == 0:
+        return 0
     if depthLeft == 0:
-        return quiesce(board, beta-1, beta, 0)
-    for move in sort_moves(board):
-        board.push(move)
+        #return evaluate(board)
+        return quiesce(board, beta-1, beta)
+    for move in moves:
+        board.move(move)
         score = -zws(board, 1-beta, depthLeft-1)
-        board.pop()
+        board.remove_last()
         if score >= beta:
             return beta
     return beta-1
+
+
+
+def find_move(board, timeLeft):
+    try:
+        with chess.polyglot.open_reader("C:\\Users\\potuz\\Desktop\\Projects\\myChess\\polyglot-collection\\Book.bin") as reader:
+            moves = list(reader.find_all(chess.Board(board.get_fen())))
+            if len(moves) > 0:
+                random.shuffle(moves)
+                move = moves[0].move
+                move = logic.move_from_pyc(move, chess.Board(board.get_fen()), board)
+                print('from opening db')
+                return move
+    except Exception:
+            traceback.print_exc()
+    if amount_of_pieces(board.pos) < 7:
+        try:
+            response = requests.get(
+                f"http://tablebase.lichess.ovh/standard?fen={board.get_fen()}")
+            json = response.json()
+            if len(json['moves']) > 0:
+                moveUci = (json['moves'][0])['uci']
+                move = chess.Move.from_uci(moveUci)
+                move = logic.move_from_pyc(move, chess.Board(board.get_fen()), board)
+                print('from endgame db')
+                return move
+        except Exception:
+            traceback.print_exc()
+    
+    depth = 4 if timeLeft > 10000 else 3
+    print(f'Searching for depth {depth}')
+    eval, best, best2 = pvs(board, -15000, 15000, depth)
+    return best if best else list(board.get_legal_moves())[0]
