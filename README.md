@@ -21,3 +21,6 @@ Runs short quiesce search for "good" captures.
 Uses static evaluation based on position of pieces on board.
 King and pawns evaluation changes in endgame.
 Does not detect mate - allows king capture => can make illegal moves or mate without realising on depth 1
+
+
+btw the bot is fucking slow so i recommend running it on depth 4 with pypy
