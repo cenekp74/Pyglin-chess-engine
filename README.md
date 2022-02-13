@@ -1,18 +1,23 @@
 # Pyglin chess engine
 Chess engine written in python
 
-### Chess logic implemented using python-chess library: https://github.com/niklasf/python-chess
-
 #### Lichess: https://lichess.org/@/Pyglin
+
+## Logic:
+Interprets board as a 2d array (empty square = '+')
+Knights moves calculated using pythagoras (square must be sq root from original square)
+Can calculate legal or pseudo legal moves, but calculating legal is very slow because it has to check is king can be captured by any of enemy pieces, threfore the bot uses pseudo legal moves.
+Supports communication with python-chess library.
 
 ## Algorythms:
 ### Pvs alpha-beta
-Uses the pvs alpha-beta prunning algorythm and transposition table for move sorting.
+Uses the pvs alpha-beta prunning algorythm.
 The pvs algorythm is enhanced with simple zero window search.
+
+
 ### Quiesce search:
-Runs short quiesce search for "good" captures and checks
-The count of quiesce searches is limited to 50, otherwise it can slow down too much while playing bullet in complicated positions.
+Runs short quiesce search for "good" captures.
 ### Evaluation:
 Uses static evaluation based on position of pieces on board.
-Evaluates checkmate positions as +10000 or -10000
-
+King and pawns evaluation changes in endgame.
+Does not detect mate - allows king capture => can make illegal moves or mate without realising on depth 1
