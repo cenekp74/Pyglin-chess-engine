@@ -972,10 +972,3 @@ def move_from_pyc(pycm, pycb, board):
         else:
             board.pos[move.toSquare[0]+1][move.toSquare[1]] = '+'
     return move
-
-if __name__ == '__main__':
-    board = Board(fen='rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq - 0 1')
-    print(board.get_fen())
-    print(board.pos)
-    print(list(board.get_pseudo_legal_moves()))
-
