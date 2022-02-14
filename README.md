@@ -5,7 +5,7 @@ Chess engine written in python
 
 ## Logic:
 Interprets board as a 2d array (empty square = '+')
-Knights moves calculated using pythagoras (square must be sq root from original square)
+Knights moves calculated using pythagoras (sq root of distance between squares must be 5)
 Can calculate legal or pseudo legal moves, but calculating legal is very slow because it has to check is king can be captured by any of enemy pieces, threfore the bot uses pseudo legal moves.
 Supports communication with python-chess library.
 
