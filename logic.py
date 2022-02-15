@@ -882,6 +882,7 @@ class Board():
         elif move.castling == 'K':
             self.pos[0][7] = '+'
             self.pos[0][5] = 'R'
+        return Board(fen=self.get_fen())
 
     def remove_last(self):
         self.turn = 0 if self.turn == 1 else 1
@@ -932,6 +933,12 @@ class Board():
             return True
         return False
 
+    def nullmove(self):
+        self.turn = 1 if self.turn == 0 else 0
+        fen = self.get_fen()
+        self.turn = 1 if self.turn == 0 else 0
+        return Board(fen=fen)
+
 def get_square_name(square):
     file = COLUMNS[square[1]]
     return file + str(square[0]+1)
@@ -972,3 +979,4 @@ def move_from_pyc(pycm, pycb, board):
         else:
             board.pos[move.toSquare[0]+1][move.toSquare[1]] = '+'
     return move
+
