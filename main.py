@@ -145,10 +145,26 @@ PIECES_SQUARES_B_ENDGAME = {
     'k': list(reversed(PIECES_SQUARES_W_ENDGAME['k']))
 }
 
+def move_value(board, move):
+    piece1 = board.pos[move.fromSquare[0]][move.fromSquare[1]]
+    piece2 = board.pos[move.toSquare[0]][move.toSquare[1]]
+    value = PIECES_VAL[piece1.lower()]
+    if board.turn == 1:
+        value += PIECES_SQUARES_W[piece1.lower()][move.fromSquare[0]*8+move.fromSquare[1]] if not is_endgame(board) else PIECES_SQUARES_W_ENDGAME[piece1.lower()][move.fromSquare[0]*8+move.fromSquare[1]]
+    else:
+        value += PIECES_SQUARES_B[piece1.lower()][move.fromSquare[0]*8+move.fromSquare[1]] if not is_endgame(board) else PIECES_SQUARES_B_ENDGAME[piece1.lower()][move.fromSquare[0]*8+move.fromSquare[1]]
+    if piece2 != '+':
+        value += PIECES_VAL[piece2.lower()]
+    if move.promotion: value += PIECES_VAL[move.promotion]
+    return value
+
 def evaluate(board):
     eval = 0
     isEndgame = is_endgame(board)
-
+    if not board.get_king(1):
+        return -10000 if board.turn == 1 else 10000
+    if not board.get_king(0):
+        return 10000 if board.turn == 1 else -10000
     for rowN, row in enumerate(board.pos):
         for colN, squareSymbol in enumerate(row):
             if squareSymbol == '+': continue
@@ -231,17 +247,15 @@ def quiesce(board, alpha, beta):
 def pvs(board, alpha, beta, depthLeft):
     #king captured
     if not board.get_king(0) or not board.get_king(1):
-        return -evaluate(board), None, 
+        return -evaluate(board), None, None
     #repetition
     if board.is_threefold():
         return 0, None, None
+    
     moves = list(sort_moves(board))
-    #stalemate
-    if len(moves) == 0:
-        return 0, None, None
+
     best2 = None
     if depthLeft == 0:
-        #return evaluate(board), None, None
         return -quiesce(board, alpha, beta), None, None  
         
     best = None
@@ -259,7 +273,20 @@ def pvs(board, alpha, beta, depthLeft):
             best = move
         if alpha >= beta:
             best = move
-            break
+            return -alpha, best, best2
+
+    #stalemate check (only if there is less than or 8 legal moves, otherwise it cant be a stalemate since one of the moves has to be with a piece other than king)
+    if len(moves) <= 8:
+        is_dead = lambda brd: any(move_value(brd, move) >= 9999 for move in brd.get_pseudo_legal_moves())
+        for move in board.get_pseudo_legal_moves():
+            if not is_dead(board.move(move)):
+                board.remove_last()
+                break
+            board.remove_last()
+        else:
+            in_check = is_dead(board.nullmove())
+            if not in_check:
+                return 0, None, None
     return -alpha, best, best2
 
 def zws(board, beta, depthLeft):
@@ -268,11 +295,7 @@ def zws(board, beta, depthLeft):
     if board.is_threefold():
         return 0
     moves = list(sort_moves(board))
-    #stalemate
-    if len(moves) == 0:
-        return 0
     if depthLeft == 0:
-        #return evaluate(board)
         return quiesce(board, beta-1, beta)
     for move in moves:
         board.move(move)
@@ -280,6 +303,19 @@ def zws(board, beta, depthLeft):
         board.remove_last()
         if score >= beta:
             return beta
+
+    #stalemate check (only if there is less than or 8 legal moves, otherwise it cant be a stalemate since one of the moves has to be with a piece other than king)
+    if len(moves) <= 8:
+        is_dead = lambda brd: any(move_value(brd, move) >= 9999 for move in brd.get_pseudo_legal_moves())
+        for move in board.get_pseudo_legal_moves():
+            if not is_dead(board.move(move)):
+                board.remove_last()
+                break
+            board.remove_last()
+        else:
+            in_check = is_dead(board.nullmove())
+            if not in_check:
+                return 0
     return beta-1
 
 
@@ -310,7 +346,8 @@ def find_move(board, timeLeft):
         except Exception:
             traceback.print_exc()
     
-    depth = 4 if timeLeft > 10000 else 3
+    depth = 4 if timeLeft > 30000 else 3
+    if timeLeft < 5000: depth = 2
     print(f'Searching for depth {depth}')
     eval, best, best2 = pvs(board, -15000, 15000, depth)
     return best if best else list(board.get_legal_moves())[0]
